@@ -1,17 +1,16 @@
-#![windows_subsystem = "windows"]
+// #![windows_subsystem = "windows"]
 
 mod montagne_theme;
 
 use montagne_theme::{editor_style, text_editor_style};
 
-use std::fs::File;
-use std::io::{self, Read};
-use std::path::{Path, PathBuf};
+use std::io;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use ::iced::widget::text_editor;
 use ::iced::{Element, Length};
-use iced::widget::{column, container, horizontal_space, row, text};
+use iced::widget::{self, column, container, horizontal_space, row, text};
 use iced::{Padding, Task};
 
 fn main() -> iced::Result {
@@ -30,62 +29,60 @@ struct Montagne {
 #[derive(Debug, Clone)]
 enum Message {
     Edit(text_editor::Action),
+    FileOpened(Result<(PathBuf, Arc<String>), Error>),
 }
 
 impl Montagne {
     fn new() -> (Self, Task<Message>) {
-        // (
-        //     Self {
-        //         content: text_editor::Content::new(),
-        //         theme:
-        //     }
-        // );
-        // change later to query from SQLite
-        // this whole thing will later evolve into opening a number of files
-        // to continue working on them (if they were not closed by user)
-        // let str_path_last_closed_file = String::new();
-        // let path = Path::new("target/README.md");
-        let str_path_last_closed_file = "target/README.md".to_string();
-
-        let path = Path::new(str_path_last_closed_file.as_str());
-
-        /* Use this later to show error message that a file couldn't be opened
-        let display = path.display();
-         */
-
-        if let Ok(mut file) = File::open(&path) {
-            let mut s = String::new();
-
-            if let Ok(_why) = file.read_to_string(&mut s) {
-                return (
-                    Self {
-                        content: text_editor::Content::with_text(&s),
-                        file: Some(path.into()),
-                    },
-                    Task::none(),
-                );
-            }
-        }
-
-        // Couldn't open file for some reason
         (
             Self {
-                content: text_editor::Content::default(),
-                file: Some(path.into()),
+                content: text_editor::Content::new(),
+                file: None,
             },
-            Task::none(),
+            Task::batch([
+                Task::perform(
+                    load_file(format!("{}\\target\\README.md", env!("CARGO_MANIFEST_DIR"))),
+                    Message::FileOpened,
+                ),
+                widget::focus_next(),
+            ]),
         )
     }
 
-    fn update(&mut self, message: Message) {
+    fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::Edit(action) => {
                 self.content.perform(action);
+
+                Task::none()
+            }
+            Message::FileOpened(result) => {
+                if let Ok((path, contents)) = result {
+                    self.file = Some(path);
+                    self.content = text_editor::Content::with_text(&contents);
+                }
+                Task::none()
             }
         }
     }
 
     fn view(&self) -> Element<'_, Message> {
+        // Top Content
+        let menu_bar = row![horizontal_space(), text("")];
+
+        // Main Content
+        let text_editor_input = text_editor(&self.content)
+            .height(Length::Fill)
+            .on_action(Message::Edit)
+            .style(text_editor_style);
+
+        // Bottom Content
+        let position = {
+            let (ln, col) = self.content.cursor_position();
+
+            text(format!("Ln {}, Col {}", ln + 1, col + 1))
+        };
+
         let path_text = match &self.file {
             Some(path) => format!("{}", path.display()),
             None => String::new(),
@@ -93,20 +90,10 @@ impl Montagne {
 
         let filename = text(path_text);
 
-        let menu_bar = row![horizontal_space(), filename,];
+        let status_bar = row![position, horizontal_space(), filename];
 
-        let text_editor_input = text_editor(&self.content)
-            .height(Length::Fill)
-            .on_action(Message::Edit)
-            .style(text_editor_style);
-
-        let position = {
-            let (ln, col) = self.content.cursor_position();
-
-            text(format!("Ln {}, Col {}", ln + 1, col + 1))
-        };
-
-        container(column![menu_bar, text_editor_input, position])
+        // App Display
+        container(column![menu_bar, text_editor_input, status_bar])
             .padding(Padding::from([5, 5]))
             .style(editor_style)
             .into()
