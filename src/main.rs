@@ -86,12 +86,13 @@ impl Montagne {
     }
 
     fn view(&self) -> Element<'_, Message> {
-        let mut filename = text("");
-        if let Some(path) = &self.file {
-            if let Some(str_path) = path.to_str() {
-                filename = text(str_path);
-            }
-        }
+        let path_text = match &self.file {
+            Some(path) => format!("{}", path.display()),
+            None => String::new(),
+        };
+
+        let filename = text(path_text);
+
         let menu_bar = row![horizontal_space(), filename,];
 
         let text_editor_input = text_editor(&self.content)
@@ -112,7 +113,6 @@ impl Montagne {
     }
 }
 
-
 // In any case we can show a msg to the user
 #[derive(Debug, Clone)]
 pub enum Error {
@@ -124,9 +124,9 @@ async fn load_file(path: impl Into<PathBuf>) -> Result<(PathBuf, Arc<String>), E
     let path = path.into();
 
     let contents = tokio::fs::read_to_string(&path)
-    .await
-    .map(Arc::new)
-    .map_err(|error| Error::IoError(error.kind()))?;
+        .await
+        .map(Arc::new)
+        .map_err(|error| Error::IoError(error.kind()))?;
 
     Ok((path, contents))
 }
