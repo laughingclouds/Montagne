@@ -4,8 +4,14 @@ use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 
-use ::iced::{Element, Length};
 use ::iced::widget::text_editor;
+use ::iced::{Element, Length};
+use iced::Padding;
+use iced::widget::container;
+
+// struct PlainEditorStyle;
+
+// impl StyleSh
 
 // define state
 struct MdEditor {
@@ -52,16 +58,22 @@ enum Message {
 }
 
 impl MdEditor {
-    fn view(&self) -> Element<'_, Message> {
-        text_editor(&self.content).height(Length::Fill).on_action(Message::Edit).into()
-    }
-
     fn update(&mut self, message: Message) {
         match message {
             Message::Edit(action) => {
                 self.content.perform(action);
             }
         }
+    }
+
+    fn view(&self) -> Element<'_, Message> {
+        let text_editor_input = text_editor(&self.content)
+            .height(Length::Fill)
+            .on_action(Message::Edit);
+
+        container(text_editor_input)
+            .padding(Padding::default().bottom(20))
+            .into()
     }
 }
 
