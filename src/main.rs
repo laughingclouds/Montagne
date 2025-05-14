@@ -1,16 +1,17 @@
 #![windows_subsystem = "windows"]
 
+mod montagne_theme;
+
+use montagne_theme::{editor_style, text_editor_style};
+
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 
 use ::iced::widget::text_editor;
 use ::iced::{Element, Length};
-use iced::widget::{column, text};
-
-// struct PlainEditorStyle;
-
-// impl StyleSh
+use iced::widget::{column, container, text};
+use iced::Padding;
 
 // define state
 struct Montagne {
@@ -69,7 +70,8 @@ impl Montagne {
     fn view(&self) -> Element<'_, Message> {
         let text_editor_input = text_editor(&self.content)
             .height(Length::Fill)
-            .on_action(Message::Edit);
+            .on_action(Message::Edit)
+            .style(text_editor_style);
 
         let position = {
             let (ln, col) = self.content.cursor_position();
@@ -77,11 +79,13 @@ impl Montagne {
             text(format!("Ln {}, Col {}", ln + 1, col + 1))
         };
 
-        column![
+        container(column![
             text(&self.str_path_last_closed_file),
             text_editor_input,
             position
-        ]
+        ])
+        .padding(Padding::from([5, 5]))
+        .style(editor_style)
         .into()
     }
 }
