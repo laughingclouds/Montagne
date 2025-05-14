@@ -10,8 +10,8 @@ use std::path::Path;
 
 use ::iced::widget::text_editor;
 use ::iced::{Element, Length};
-use iced::widget::{column, container, text};
 use iced::Padding;
+use iced::widget::{column, container, horizontal_space, row, text};
 
 // define state
 struct Montagne {
@@ -68,6 +68,11 @@ impl Montagne {
     }
 
     fn view(&self) -> Element<'_, Message> {
+        let menu_bar = row![
+            horizontal_space(),
+            text(&self.str_path_last_closed_file),
+        ];
+
         let text_editor_input = text_editor(&self.content)
             .height(Length::Fill)
             .on_action(Message::Edit)
@@ -80,7 +85,7 @@ impl Montagne {
         };
 
         container(column![
-            text(&self.str_path_last_closed_file),
+            menu_bar,
             text_editor_input,
             position
         ])
