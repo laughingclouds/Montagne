@@ -1,9 +1,5 @@
-use iced::Border;
-use iced::Color;
-use iced::Shadow;
-use iced::Theme;
-use iced::widget::container;
-use iced::widget::text_editor;
+use iced::widget::{container, text, text_editor};
+use iced::{Border, Color, Element, Font, Shadow, Theme};
 
 // styling
 pub fn editor_style(_theme: &Theme) -> container::Style {
@@ -24,4 +20,24 @@ pub fn text_editor_style(_theme: &Theme, _status: text_editor::Status) -> text_e
         value: Color::WHITE,
         selection: Color::from_rgb(0.6784, 0.8392, 1.0).scale_alpha(0.15),
     }
+}
+
+// directly copied from https://github.com/iced-rs/iced/blob/9bfbd7cda79aceef2d115b8bb35e8f3257dcabf2/examples/editor/src/main.rs#L306
+
+pub fn new_icon<'a, Message>() -> Element<'a, Message> {
+    icon('\u{0e800}')
+}
+
+pub fn save_icon<'a, Message>() -> Element<'a, Message> {
+    icon('\u{0e801}')
+}
+
+pub fn open_icon<'a, Message>() -> Element<'a, Message> {
+    icon('\u{0f115}')
+}
+
+pub fn icon<'a, Message>(codepoint: char) -> Element<'a, Message> {
+    const ICON_FONT: Font = Font::with_name("editor-icons");
+
+    text(codepoint).font(ICON_FONT).into()
 }

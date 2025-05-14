@@ -2,21 +2,25 @@
 
 mod montagne_theme;
 
-use montagne_theme::{editor_style, text_editor_style};
+use montagne_theme::{editor_style, new_icon, open_icon, save_icon, text_editor_style};
 
 use std::io;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use ::iced::widget::text_editor;
-use ::iced::{Element, Length};
-use iced::widget::{self, column, container, horizontal_space, markdown, row, scrollable, text};
-use iced::{Padding, Task, Theme};
+use iced::widget::{
+    button, column, container, horizontal_space, markdown, row, scrollable, text, text_editor,
+    tooltip,
+};
+use iced::{Element, Length};
+use iced::{Font, Padding, Task, Theme};
 
 fn main() -> iced::Result {
     iced::application("Montagne", Montagne::update, Montagne::view)
         .centered()
         .theme(Montagne::theme)
+        .font(include_bytes!("../fonts/icons.ttf").as_slice())
+        .default_font(Font::MONOSPACE)
         .run_with(Montagne::new)
 }
 
@@ -25,15 +29,23 @@ struct Montagne {
     content: text_editor::Content,
     items: Vec<markdown::Item>,
     file: Option<PathBuf>,
+
     theme: Theme,
+
+    is_loading: bool,
+    is_dirty: bool,
 }
 
 // define messages (interactions of the application)
 #[derive(Debug, Clone)]
 enum Message {
     Edit(text_editor::Action),
-    FileOpened(Result<(PathBuf, Arc<String>), Error>),
     LinkClicked(markdown::Url),
+    NewFile,
+    OpenFile,
+    FileOpened(Result<(PathBuf, Arc<String>), Error>),
+    SaveFile,
+    FileSaved(Result<PathBuf, Error>),
 }
 
 impl Montagne {
@@ -45,14 +57,18 @@ impl Montagne {
                 items: markdown::parse("").collect(),
                 file: None,
                 theme: theme,
+                is_loading: false,
+                is_dirty: false,
             },
-            Task::batch([
-                Task::perform(
-                    load_file(format!("{}\\target\\README.md", env!("CARGO_MANIFEST_DIR"))),
-                    Message::FileOpened,
-                ),
-                widget::focus_next(),
-            ]),
+            // change later to reload tabs (or previously opened editors)
+            // Task::batch([
+            //     Task::perform(
+            //         load_file(format!("{}\\target\\README.md", env!("CARGO_MANIFEST_DIR"))),
+            //         Message::FileOpened,
+            //     ),
+            //     widget::focus_next(),
+            // ]),
+            Task::none(),
         )
     }
 
@@ -60,6 +76,8 @@ impl Montagne {
         match message {
             Message::Edit(action) => {
                 let is_edit = action.is_edit();
+
+                self.is_dirty = self.is_dirty || action.is_edit();
 
                 self.content.perform(action);
 
@@ -69,12 +87,56 @@ impl Montagne {
 
                 Task::none()
             }
-            Message::FileOpened(result) => {
-                if let Ok((path, contents)) = result {
-                    self.file = Some(path);
-                    self.content = text_editor::Content::with_text(&contents);
-                    self.items = markdown::parse(&contents).collect();
+            Message::NewFile => {
+                if !self.is_loading {
+                    self.file = None;
+                    self.content = text_editor::Content::new();
+                    self.items = markdown::parse(&self.content.text()).collect();
                 }
+
+                Task::none()
+            }
+            Message::OpenFile => {
+                if self.is_loading {
+                    Task::none()
+                } else {
+                    self.is_loading = true;
+
+                    Task::perform(open_file(), Message::FileOpened)
+                }
+            }
+            Message::FileOpened(result) => {
+                self.is_loading = false;
+                self.is_dirty = false;
+
+                if let Ok((path, content)) = result {
+                    self.content = text_editor::Content::with_text(&content);
+                    self.items = markdown::parse(&content).collect();
+                    self.file = Some(path);
+                }
+
+                Task::none()
+            }
+            Message::SaveFile => {
+                if self.is_loading {
+                    Task::none()
+                } else {
+                    self.is_loading = true;
+
+                    Task::perform(
+                        save_file(self.file.clone(), self.content.text()),
+                        Message::FileSaved,
+                    )
+                }
+            }
+            Message::FileSaved(result) => {
+                self.is_loading = false;
+
+                if let Ok(path) = result {
+                    self.file = Some(path);
+                    self.is_dirty = false;
+                }
+
                 Task::none()
             }
             Message::LinkClicked(link) => {
@@ -86,42 +148,68 @@ impl Montagne {
 
     fn view(&self) -> Element<'_, Message> {
         // Top Content
-        let menu_bar = row![horizontal_space(), text("")];
+        let menu_bar = row![
+            action(new_icon(), "New file", Some(Message::NewFile)),
+            action(
+                open_icon(),
+                "Open file",
+                (!self.is_loading).then_some(Message::OpenFile)
+            ),
+            action(
+                save_icon(),
+                "Save file",
+                (self.is_dirty).then_some(Message::SaveFile)
+            )
+        ];
 
         // Main Content
-        let text_editor_input = text_editor(&self.content)
-            .height(Length::Fill)
-            .on_action(Message::Edit)
-            .style(text_editor_style);
+        let main = {
+            let text_editor_input = text_editor(&self.content)
+                .height(Length::Fill)
+                .on_action(Message::Edit)
+                .style(text_editor_style);
 
-        let preview = markdown(
-            &self.items,
-            markdown::Settings::default(),
-            markdown::Style::from_palette(self.theme.palette()),
-        )
-        .map(Message::LinkClicked);
+            let preview = markdown(
+                &self.items,
+                markdown::Settings::default(),
+                markdown::Style::from_palette(self.theme.palette()),
+            )
+            .map(Message::LinkClicked);
 
-        let main = row![
-            text_editor_input,
-            scrollable(preview).spacing(10).height(Length::Fill)
-        ]
-        .spacing(10);
+            row![
+                text_editor_input,
+                scrollable(preview).spacing(10).height(Length::Fill)
+            ]
+            .spacing(10)
+        };
 
         // Bottom Content
-        let position = {
-            let (ln, col) = self.content.cursor_position();
+        let status_bar = {
+            let position = {
+                let (ln, col) = self.content.cursor_position();
 
-            text(format!("Ln {}, Col {}", ln + 1, col + 1))
+                text(format!("Ln {}, Col {}", ln + 1, col + 1))
+            };
+
+            let path_text = match &self.file {
+                Some(path) => {
+                    let path = path.display().to_string();
+
+                    // since our file path is on the right end we can
+                    // afford to have more space
+                    if path.len() > 80 {
+                        format!("...{}", &path[path.len() - 40..])
+                    } else {
+                        path
+                    }
+                }
+                None => String::from("New file"),
+            };
+
+            let filename = text(path_text);
+
+            row![position, horizontal_space(), filename]
         };
-
-        let path_text = match &self.file {
-            Some(path) => format!("{}", path.display()),
-            None => String::new(),
-        };
-
-        let filename = text(path_text);
-
-        let status_bar = row![position, horizontal_space(), filename];
 
         // App Display
         container(column![menu_bar, main, status_bar])
@@ -142,6 +230,18 @@ pub enum Error {
     IoError(io::ErrorKind),
 }
 
+// Asynchronous flow for opening a file picker and then calling load_file()
+async fn open_file() -> Result<(PathBuf, Arc<String>), Error> {
+    let picked_file = rfd::AsyncFileDialog::new()
+        .set_title("Open a markdown file...")
+        .pick_file()
+        .await
+        .ok_or(Error::DialogClosed)?;
+
+    load_file(picked_file).await
+}
+
+// Asynchronously load a file given its PathBuffer
 async fn load_file(path: impl Into<PathBuf>) -> Result<(PathBuf, Arc<String>), Error> {
     let path = path.into();
 
@@ -151,4 +251,45 @@ async fn load_file(path: impl Into<PathBuf>) -> Result<(PathBuf, Arc<String>), E
         .map_err(|error| Error::IoError(error.kind()))?;
 
     Ok((path, contents))
+}
+
+async fn save_file(path: Option<PathBuf>, contents: String) -> Result<PathBuf, Error> {
+    let path = if let Some(path) = path {
+        path
+    } else {
+        rfd::AsyncFileDialog::new()
+            .save_file()
+            .await
+            .as_ref()
+            .map(rfd::FileHandle::path)
+            .map(Path::to_owned)
+            .ok_or(Error::DialogClosed)?
+    };
+
+    tokio::fs::write(&path, contents)
+        .await
+        .map_err(|error| Error::IoError(error.kind()))?;
+
+    Ok(path)
+}
+
+// A wrapper for any on_press events on buttons.
+fn action<'a, Message: Clone + 'a>(
+    content: impl Into<Element<'a, Message>>,
+    label: &'a str,
+    on_press: Option<Message>,
+) -> Element<'a, Message> {
+    let action = button(container(content).center_x(30));
+
+    if let Some(on_press) = on_press {
+        tooltip(
+            action.on_press(on_press),
+            label,
+            tooltip::Position::FollowCursor,
+        )
+        .style(container::rounded_box)
+        .into()
+    } else {
+        action.style(button::secondary).into()
+    }
 }
