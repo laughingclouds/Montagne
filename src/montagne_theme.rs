@@ -22,6 +22,6 @@ pub fn text_editor_style(_theme: &Theme, _status: text_editor::Status) -> text_e
         icon: Color::default(),
         placeholder: Color::WHITE,
         value: Color::WHITE,
-        selection: Color::WHITE.scale_alpha(0.30),
+        selection: Color::from_rgb(0.6784, 0.8392, 1.0).scale_alpha(0.15),
     }
 }
