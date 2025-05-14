@@ -6,8 +6,7 @@ use std::path::Path;
 
 use ::iced::widget::text_editor;
 use ::iced::{Element, Length};
-use iced::Padding;
-use iced::widget::container;
+use iced::widget::{column, text};
 
 // struct PlainEditorStyle;
 
@@ -27,6 +26,7 @@ impl Default for MdEditor {
         // to continue working on them (if they were not closed by user)
         let str_path_last_closed_file = String::new();
         // let path = Path::new("target/README.md");
+        // let str_path_last_closed_file = "target/README.md".to_string();
         let path = Path::new(str_path_last_closed_file.as_str());
 
         /* Use this later to show error message that a file couldn't be opened
@@ -71,9 +71,7 @@ impl MdEditor {
             .height(Length::Fill)
             .on_action(Message::Edit);
 
-        container(text_editor_input)
-            .padding(Padding::default().bottom(20))
-            .into()
+        column![text_editor_input, text(&self.str_path_last_closed_file),].into()
     }
 }
 
