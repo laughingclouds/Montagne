@@ -13,13 +13,13 @@ use iced::widget::{column, text};
 // impl StyleSh
 
 // define state
-struct MdEditor {
+struct Montagne {
     content: text_editor::Content,
     str_path_last_closed_file: String,
 }
 
 // TODO: Extend later to reopen file
-impl Default for MdEditor {
+impl Default for Montagne {
     fn default() -> Self {
         // change later to query from SQLite
         // this whole thing will later evolve into opening a number of files
@@ -57,7 +57,7 @@ enum Message {
     Edit(text_editor::Action),
 }
 
-impl MdEditor {
+impl Montagne {
     fn update(&mut self, message: Message) {
         match message {
             Message::Edit(action) => {
@@ -87,5 +87,5 @@ impl MdEditor {
 }
 
 fn main() -> iced::Result {
-    iced::run("Montagne", MdEditor::update, MdEditor::view)
+    iced::run("Montagne", Montagne::update, Montagne::view)
 }
