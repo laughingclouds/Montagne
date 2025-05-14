@@ -77,7 +77,12 @@ impl MdEditor {
             text(format!("Ln {}, Col {}", ln + 1, col + 1))
         };
 
-        column![text(&self.str_path_last_closed_file), text_editor_input, position].into()
+        column![
+            text(&self.str_path_last_closed_file),
+            text_editor_input,
+            position
+        ]
+        .into()
     }
 }
 
