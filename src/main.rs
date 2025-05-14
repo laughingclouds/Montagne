@@ -2,17 +2,18 @@
 
 mod montagne_theme;
 
-use montagne_theme::{editor_style, open_icon, text_editor_style};
+use montagne_theme::{editor_style, new_icon, open_icon, text_editor_style};
 
 use std::io;
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::sync::Arc;
 
-use ::iced::widget::text_editor;
-use ::iced::{Element, Length};
 use iced::widget::{
-    self, button, column, container, horizontal_space, markdown, row, scrollable, text, tooltip,
+    button, column, container, horizontal_space, markdown, row, scrollable, text, text_editor,
+    tooltip,
 };
+use iced::{Element, Length};
 use iced::{Font, Padding, Task, Theme};
 
 fn main() -> iced::Result {
@@ -40,6 +41,7 @@ struct Montagne {
 enum Message {
     Edit(text_editor::Action),
     LinkClicked(markdown::Url),
+    NewFile,
     OpenFile,
     FileOpened(Result<(PathBuf, Arc<String>), Error>),
 }
@@ -55,13 +57,15 @@ impl Montagne {
                 theme: theme,
                 is_loading: false,
             },
-            Task::batch([
-                Task::perform(
-                    load_file(format!("{}\\target\\README.md", env!("CARGO_MANIFEST_DIR"))),
-                    Message::FileOpened,
-                ),
-                widget::focus_next(),
-            ]),
+            // change later to reload tabs (or previously opened editors)
+            // Task::batch([
+            //     Task::perform(
+            //         load_file(format!("{}\\target\\README.md", env!("CARGO_MANIFEST_DIR"))),
+            //         Message::FileOpened,
+            //     ),
+            //     widget::focus_next(),
+            // ]),
+            Task::none(),
         )
     }
 
@@ -78,22 +82,35 @@ impl Montagne {
 
                 Task::none()
             }
+            Message::NewFile => {
+                if !self.is_loading {
+                    self.file = None;
+                    self.content = text_editor::Content::new();
+                    self.items = markdown::parse(&self.content.text()).collect();
+                }
+
+                Task::none()
+            }
             Message::OpenFile => {
                 if self.is_loading {
                     Task::none()
                 } else {
-                    // self.is_loading = true;
+                    self.is_loading = true;
 
                     Task::perform(open_file(), Message::FileOpened)
                 }
             }
-            Message::FileOpened(Ok((path, contents))) => {
-                self.file = Some(path);
-                self.content = text_editor::Content::with_text(&contents);
-                self.items = markdown::parse(&contents).collect();
+            Message::FileOpened(result) => {
+                self.is_loading = false;
+
+                if let Ok((path, content)) = result {
+                    self.content = text_editor::Content::with_text(&content);
+                    self.items = markdown::parse(&content).collect();
+                    self.file = Some(path);
+                }
+
                 Task::none()
             }
-            Message::FileOpened(Err(_error)) => Task::none(),
             Message::LinkClicked(link) => {
                 let _ = open::that_in_background(link.to_string());
                 Task::none()
@@ -103,46 +120,53 @@ impl Montagne {
 
     fn view(&self) -> Element<'_, Message> {
         // Top Content
-        let menu_bar = row![action(
-            open_icon(),
-            "Open file",
-            (!self.is_loading).then_some(Message::OpenFile)
-        )];
+        let menu_bar = row![
+            action(new_icon(), "New file", Some(Message::NewFile)),
+            action(
+                open_icon(),
+                "Open file",
+                (!self.is_loading).then_some(Message::OpenFile)
+            )
+        ];
 
         // Main Content
-        let text_editor_input = text_editor(&self.content)
-            .height(Length::Fill)
-            .on_action(Message::Edit)
-            .style(text_editor_style);
+        let main = {
+            let text_editor_input = text_editor(&self.content)
+                .height(Length::Fill)
+                .on_action(Message::Edit)
+                .style(text_editor_style);
 
-        let preview = markdown(
-            &self.items,
-            markdown::Settings::default(),
-            markdown::Style::from_palette(self.theme.palette()),
-        )
-        .map(Message::LinkClicked);
+            let preview = markdown(
+                &self.items,
+                markdown::Settings::default(),
+                markdown::Style::from_palette(self.theme.palette()),
+            )
+            .map(Message::LinkClicked);
 
-        let main = row![
-            text_editor_input,
-            scrollable(preview).spacing(10).height(Length::Fill)
-        ]
-        .spacing(10);
+            row![
+                text_editor_input,
+                scrollable(preview).spacing(10).height(Length::Fill)
+            ]
+            .spacing(10)
+        };
 
         // Bottom Content
-        let position = {
-            let (ln, col) = self.content.cursor_position();
+        let status_bar = {
+            let position = {
+                let (ln, col) = self.content.cursor_position();
 
-            text(format!("Ln {}, Col {}", ln + 1, col + 1))
+                text(format!("Ln {}, Col {}", ln + 1, col + 1))
+            };
+
+            let path_text = match &self.file {
+                Some(path) => format!("{}", path.display()),
+                None => String::from_str("New file").unwrap_or(String::new()),
+            };
+
+            let filename = text(path_text);
+
+            row![position, horizontal_space(), filename]
         };
-
-        let path_text = match &self.file {
-            Some(path) => format!("{}", path.display()),
-            None => String::new(),
-        };
-
-        let filename = text(path_text);
-
-        let status_bar = row![position, horizontal_space(), filename];
 
         // App Display
         container(column![menu_bar, main, status_bar])
@@ -203,6 +227,6 @@ fn action<'a, Message: Clone + 'a>(
         .style(container::rounded_box)
         .into()
     } else {
-        action.style(button::primary).into()
+        action.style(button::secondary).into()
     }
 }
