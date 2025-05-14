@@ -6,7 +6,7 @@ use montagne_theme::{editor_style, text_editor_style};
 
 use std::fs::File;
 use std::io::{self, Read};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use ::iced::widget::text_editor;
@@ -23,7 +23,7 @@ fn main() -> iced::Result {
 // define state
 struct Montagne {
     content: text_editor::Content,
-    str_path_last_closed_file: String,
+    file: Option<PathBuf>,
 }
 
 // define messages (interactions of the application)
@@ -34,6 +34,12 @@ enum Message {
 
 impl Montagne {
     fn new() -> (Self, Task<Message>) {
+        // (
+        //     Self {
+        //         content: text_editor::Content::new(),
+        //         theme:
+        //     }
+        // );
         // change later to query from SQLite
         // this whole thing will later evolve into opening a number of files
         // to continue working on them (if they were not closed by user)
@@ -54,7 +60,7 @@ impl Montagne {
                 return (
                     Self {
                         content: text_editor::Content::with_text(&s),
-                        str_path_last_closed_file: str_path_last_closed_file,
+                        file: Some(path.into()),
                     },
                     Task::none(),
                 );
@@ -65,12 +71,12 @@ impl Montagne {
         (
             Self {
                 content: text_editor::Content::default(),
-                str_path_last_closed_file: String::default(),
+                file: Some(path.into()),
             },
             Task::none(),
         )
     }
-        
+
     fn update(&mut self, message: Message) {
         match message {
             Message::Edit(action) => {
@@ -80,7 +86,13 @@ impl Montagne {
     }
 
     fn view(&self) -> Element<'_, Message> {
-        let menu_bar = row![horizontal_space(), text(&self.str_path_last_closed_file),];
+        let mut filename = text("");
+        if let Some(path) = &self.file {
+            if let Some(str_path) = path.to_str() {
+                filename = text(str_path);
+            }
+        }
+        let menu_bar = row![horizontal_space(), filename,];
 
         let text_editor_input = text_editor(&self.content)
             .height(Length::Fill)
@@ -100,9 +112,21 @@ impl Montagne {
     }
 }
 
-async fn load_file(path: impl AsRef<Path>) -> Result<Arc<String>, io::ErrorKind> {
-    tokio::fs::read_to_string(path)
-        .await
-        .map(Arc::new)
-        .map_err(|error| error.kind())
+
+// In any case we can show a msg to the user
+#[derive(Debug, Clone)]
+pub enum Error {
+    DialogClosed,
+    IoError(io::ErrorKind),
+}
+
+async fn load_file(path: impl Into<PathBuf>) -> Result<(PathBuf, Arc<String>), Error> {
+    let path = path.into();
+
+    let contents = tokio::fs::read_to_string(&path)
+    .await
+    .map(Arc::new)
+    .map_err(|error| Error::IoError(error.kind()))?;
+
+    Ok((path, contents))
 }
