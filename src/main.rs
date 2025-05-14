@@ -2,11 +2,10 @@
 
 mod montagne_theme;
 
-use montagne_theme::{editor_style, new_icon, open_icon, text_editor_style};
+use montagne_theme::{editor_style, new_icon, open_icon, save_icon, text_editor_style};
 
 use std::io;
-use std::path::PathBuf;
-use std::str::FromStr;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use iced::widget::{
@@ -34,6 +33,7 @@ struct Montagne {
     theme: Theme,
 
     is_loading: bool,
+    is_dirty: bool,
 }
 
 // define messages (interactions of the application)
@@ -44,6 +44,8 @@ enum Message {
     NewFile,
     OpenFile,
     FileOpened(Result<(PathBuf, Arc<String>), Error>),
+    SaveFile,
+    FileSaved(Result<PathBuf, Error>),
 }
 
 impl Montagne {
@@ -56,6 +58,7 @@ impl Montagne {
                 file: None,
                 theme: theme,
                 is_loading: false,
+                is_dirty: false,
             },
             // change later to reload tabs (or previously opened editors)
             // Task::batch([
@@ -73,6 +76,8 @@ impl Montagne {
         match message {
             Message::Edit(action) => {
                 let is_edit = action.is_edit();
+
+                self.is_dirty = self.is_dirty || action.is_edit();
 
                 self.content.perform(action);
 
@@ -102,11 +107,34 @@ impl Montagne {
             }
             Message::FileOpened(result) => {
                 self.is_loading = false;
+                self.is_dirty = false;
 
                 if let Ok((path, content)) = result {
                     self.content = text_editor::Content::with_text(&content);
                     self.items = markdown::parse(&content).collect();
                     self.file = Some(path);
+                }
+
+                Task::none()
+            }
+            Message::SaveFile => {
+                if self.is_loading {
+                    Task::none()
+                } else {
+                    self.is_loading = true;
+
+                    Task::perform(
+                        save_file(self.file.clone(), self.content.text()),
+                        Message::FileSaved,
+                    )
+                }
+            }
+            Message::FileSaved(result) => {
+                self.is_loading = false;
+
+                if let Ok(path) = result {
+                    self.file = Some(path);
+                    self.is_dirty = false;
                 }
 
                 Task::none()
@@ -126,6 +154,11 @@ impl Montagne {
                 open_icon(),
                 "Open file",
                 (!self.is_loading).then_some(Message::OpenFile)
+            ),
+            action(
+                save_icon(),
+                "Save file",
+                (self.is_dirty).then_some(Message::SaveFile)
             )
         ];
 
@@ -159,8 +192,18 @@ impl Montagne {
             };
 
             let path_text = match &self.file {
-                Some(path) => format!("{}", path.display()),
-                None => String::from_str("New file").unwrap_or(String::new()),
+                Some(path) => {
+                    let path = path.display().to_string();
+
+                    // since our file path is on the right end we can
+                    // afford to have more space
+                    if path.len() > 80 {
+                        format!("...{}", &path[path.len() - 40..])
+                    } else {
+                        path
+                    }
+                }
+                None => String::from("New file"),
             };
 
             let filename = text(path_text);
@@ -208,6 +251,26 @@ async fn load_file(path: impl Into<PathBuf>) -> Result<(PathBuf, Arc<String>), E
         .map_err(|error| Error::IoError(error.kind()))?;
 
     Ok((path, contents))
+}
+
+async fn save_file(path: Option<PathBuf>, contents: String) -> Result<PathBuf, Error> {
+    let path = if let Some(path) = path {
+        path
+    } else {
+        rfd::AsyncFileDialog::new()
+            .save_file()
+            .await
+            .as_ref()
+            .map(rfd::FileHandle::path)
+            .map(Path::to_owned)
+            .ok_or(Error::DialogClosed)?
+    };
+
+    tokio::fs::write(&path, contents)
+        .await
+        .map_err(|error| Error::IoError(error.kind()))?;
+
+    Ok(path)
 }
 
 // A wrapper for any on_press events on buttons.
