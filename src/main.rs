@@ -3,42 +3,30 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use iced::widget::{
-    button, column, container, horizontal_space, markdown, row, scrollable, text, text_editor,
-    toggler, tooltip,
+    self, button, center, column, container, horizontal_space, markdown, opaque, row, scrollable,
+    stack, text, text_editor, toggler, tooltip,
 };
-use iced::{Element, Length};
+use iced::{Element, Length, Subscription, window};
 use iced::{Font, Padding, Task, Theme};
 
 mod montagne_theme;
-use montagne_theme::{editor_style, new_icon, open_icon, save_icon, text_editor_style};
+use montagne_theme::{
+    editor_style, exit_modal_style, new_icon, open_icon, preview_scrollable_style, save_icon,
+    text_editor_style,
+};
 
 mod montagne_file_io;
 use montagne_file_io::{Error, open_file, save_file};
 
 fn main() -> iced::Result {
     iced::application("Montagne", Montagne::update, Montagne::view)
+        .subscription(Montagne::subscription)
+        .exit_on_close_request(false)
         .centered()
-        .theme(Montagne::theme)
-        .font(include_bytes!("../fonts/icons.ttf").as_slice())
         .default_font(Font::MONOSPACE)
+        .font(include_bytes!("../fonts/icons.ttf").as_slice())
+        .theme(Montagne::theme)
         .run_with(Montagne::new)
-}
-
-// define state
-struct Montagne {
-    content: text_editor::Content,
-    items: Vec<markdown::Item>,
-    file: Option<PathBuf>,
-
-    theme: Theme,
-
-    is_loading: bool,
-    is_dirty: bool,
-
-    application_mode: Mode,
-    is_splitview: bool,
-
-    application_msg: String,
 }
 
 #[derive(Debug, Clone)]
@@ -70,6 +58,28 @@ enum Message {
     FileSaved(Result<PathBuf, Error>),
     SetMode(Mode),
     TogglerToggled(bool),
+    WindowEvent(window::Event),
+    CloseApp,
+    CloseExitModal,
+}
+
+// define state
+struct Montagne {
+    content: text_editor::Content,
+    items: Vec<markdown::Item>,
+    file: Option<PathBuf>,
+
+    theme: Theme,
+
+    is_loading: bool,
+    is_dirty: bool,
+
+    application_mode: Mode,
+    is_splitview: bool,
+
+    application_msg: String,
+
+    show_exit_modal: bool,
 }
 
 impl Montagne {
@@ -86,21 +96,31 @@ impl Montagne {
                 application_mode: Mode::Write,
                 is_splitview: false,
                 application_msg: String::from("Welcome to Montagne."),
+                show_exit_modal: false,
             },
             // change later to reload tabs (or previously opened editors)
-            // Task::batch([
-            //     Task::perform(
-            //         load_file(format!("{}\\target\\README.md", env!("CARGO_MANIFEST_DIR"))),
-            //         Message::FileOpened,
-            //     ),
-            //     widget::focus_next(),
-            // ]),
             Task::none(),
         )
     }
 
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
+            Message::WindowEvent(window::Event::CloseRequested) => {
+                if self.is_dirty {
+                    self.application_msg = "Close Requested".to_string();
+                    self.show_exit_modal = true;
+                    widget::focus_next()
+                } else {
+                    Task::done(Message::CloseApp)
+                }
+            }
+            Message::WindowEvent(_) => Task::none(),
+            Message::CloseApp => window::get_latest().and_then(window::close),
+            Message::CloseExitModal => {
+                self.application_msg = "Request Cancelled".to_string();
+                self.show_exit_modal = false;
+                Task::none()
+            }
             Message::Edit(action) => {
                 // let is_edit = action.is_edit();
 
@@ -141,7 +161,7 @@ impl Montagne {
 
                 match result {
                     Err(Error::DialogClosed) => {
-                        self.application_msg = "Dialogue closed".to_string()
+                        self.application_msg = "Dialogue closed".to_string();
                     }
                     Err(Error::IoError(kind)) => {
                         self.application_msg = format!("I/O Error {}", kind);
@@ -218,6 +238,10 @@ impl Montagne {
         }
     }
 
+    fn subscription(&self) -> Subscription<Message> {
+        window::events().map(|(_id, event)| Message::WindowEvent(event))
+    }
+
     fn view(&self) -> Element<'_, Message> {
         // Top Content
         let header = {
@@ -262,7 +286,7 @@ impl Montagne {
                 .on_action(Message::Edit)
                 .style(text_editor_style);
 
-            let preview = scrollable(
+            let mut preview = scrollable(
                 markdown(
                     &self.items,
                     markdown::Settings::default(),
@@ -275,7 +299,13 @@ impl Montagne {
 
             let main_content = match &self.application_mode {
                 Mode::Write => row![text_editor_input],
-                Mode::Preview => row![preview],
+                Mode::Preview => {
+                    preview = preview.style(preview_scrollable_style);
+                    row![center(
+                        container(preview).width(Length::Shrink).max_width(800)
+                    )]
+                }
+                // Mode::Preview => row![horizontal_space(), preview, horizontal_space()],
                 Mode::Split => row![text_editor_input, preview],
             };
 
@@ -311,10 +341,28 @@ impl Montagne {
         };
 
         // App Display
-        container(column![header, main, status_bar])
+        let app = container(column![header, main, status_bar])
             .padding(Padding::from([5, 5]))
-            .style(editor_style)
+            .style(editor_style);
+
+        if self.show_exit_modal {
+            stack![
+                app,
+                opaque(
+                    center(opaque(column![
+                        text("You have unsaved work. Close?"),
+                        row![
+                            button("Yes").on_press(Message::CloseApp),
+                            button("No").on_press(Message::CloseExitModal),
+                        ]
+                    ]))
+                    .style(exit_modal_style)
+                ),
+            ]
             .into()
+        } else {
+            app.into()
+        }
     }
 
     fn theme(&self) -> Theme {
