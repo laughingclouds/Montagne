@@ -22,6 +22,19 @@ pub fn text_editor_style(_theme: &Theme, _status: text_editor::Status) -> text_e
     }
 }
 
+pub fn exit_modal_style(_theme: &Theme) -> container::Style {
+    container::Style {
+        background: (Some(
+            Color {
+                a: 0.8,
+                ..Color::BLACK
+            }
+            .into(),
+        )),
+        ..container::Style::default()
+    }
+}
+
 // directly copied from https://github.com/iced-rs/iced/blob/9bfbd7cda79aceef2d115b8bb35e8f3257dcabf2/examples/editor/src/main.rs#L306
 
 pub fn new_icon<'a, Message>() -> Element<'a, Message> {
