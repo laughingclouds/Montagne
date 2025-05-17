@@ -48,6 +48,16 @@ enum Mode {
     Split,
 }
 
+impl std::fmt::Display for Mode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self {
+            Mode::Write => write!(f, "Write"),
+            Mode::Preview => write!(f, "Preview"),
+            Mode::Split => write!(f, "Split"),
+        }
+    }
+}
+
 // define messages (interactions of the application)
 #[derive(Debug, Clone)]
 enum Message {
@@ -64,7 +74,7 @@ enum Message {
 
 impl Montagne {
     fn new() -> (Self, Task<Message>) {
-        let theme = Theme::Dark;
+        let theme = Theme::TokyoNightStorm;
         (
             Self {
                 content: text_editor::Content::new(),
@@ -98,17 +108,10 @@ impl Montagne {
 
                 self.content.perform(action);
 
-                // if is_edit {
-                //     self.items = markdown::parse(&self.content.text()).collect();
-                // }
-
-                Task::none()
-            }
-            Message::FileOpened(Err(err)) | Message::FileSaved(Err(err)) => {
-                match err {
-                    Error::DialogClosed => self.application_msg = "Dialogue closed".to_string(),
-                    Error::IoError(kind) => self.application_msg = format!("I/O Error {}", kind),
+                if self.is_splitview {
+                    self.items = markdown::parse(&self.content.text()).collect();
                 }
+
                 Task::none()
             }
             Message::NewFile => {
@@ -116,7 +119,9 @@ impl Montagne {
                     self.file = None;
                     self.content = text_editor::Content::new();
                     // optionally check what mode the file is opened with
-                    // self.items = markdown::parse(&self.content.text()).collect();
+                    if matches!(&self.application_mode, Mode::Preview | Mode::Split) {
+                        self.items = markdown::parse(&self.content.text()).collect();
+                    }
                 }
 
                 Task::none()
@@ -134,11 +139,23 @@ impl Montagne {
                 self.is_loading = false;
                 self.is_dirty = false;
 
-                if let Ok((path, content)) = result {
-                    self.content = text_editor::Content::with_text(&content);
-                    // optionally check what mode the file is opened with
-                    // self.items = markdown::parse(&content).collect();
-                    self.file = Some(path);
+                match result {
+                    Err(Error::DialogClosed) => {
+                        self.application_msg = "Dialogue closed".to_string()
+                    }
+                    Err(Error::IoError(kind)) => {
+                        self.application_msg = format!("I/O Error {}", kind);
+                        eprint!("{}", kind)
+                    }
+                    Ok((path, content)) => {
+                        self.content = text_editor::Content::with_text(&content);
+                        self.file = Some(path);
+                        self.application_msg = "File Opened".to_string();
+
+                        if matches!(&self.application_mode, Mode::Preview | Mode::Split) {
+                            self.items = markdown::parse(&self.content.text()).collect();
+                        }
+                    }
                 }
 
                 Task::none()
@@ -158,9 +175,18 @@ impl Montagne {
             Message::FileSaved(result) => {
                 self.is_loading = false;
 
-                if let Ok(path) = result {
-                    self.file = Some(path);
-                    self.is_dirty = false;
+                match result {
+                    Err(Error::DialogClosed) => {
+                        self.application_msg = "Dialogue closed".to_string();
+                    }
+                    Err(Error::IoError(kind)) => {
+                        self.application_msg = format!("I/O Error {}", kind)
+                    }
+                    Ok(path) => {
+                        self.file = Some(path);
+                        self.is_dirty = false;
+                        self.application_msg = "File Saved".to_string();
+                    }
                 }
 
                 Task::none()
@@ -173,6 +199,8 @@ impl Montagne {
                 if matches!(mode, Mode::Preview | Mode::Split) {
                     self.items = markdown::parse(&self.content.text()).collect();
                 }
+
+                self.application_msg = format!("{} mode", mode);
 
                 self.application_mode = mode;
 
@@ -263,23 +291,23 @@ impl Montagne {
             };
 
             let path_text = match &self.file {
-                Some(path) => {
-                    let path = path.display().to_string();
-
-                    // since our file path is on the right end we can
-                    // afford to have more space
-                    if path.len() > 80 {
-                        format!("...{}", &path[path.len() - 40..])
-                    } else {
-                        path
-                    }
-                }
+                Some(path) => path
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .map(|name| name.to_string())
+                    .unwrap_or_else(|| "Unnamed file".to_string()),
                 None => String::from("New file"),
             };
 
             let filename = text(path_text);
 
-            row![position, horizontal_space(), filename]
+            row![
+                position,
+                horizontal_space(),
+                text(&self.application_msg),
+                horizontal_space(),
+                filename
+            ]
         };
 
         // App Display
@@ -303,13 +331,9 @@ fn action<'a, Message: Clone + 'a>(
     let action = button(container(content).center_x(30));
 
     if let Some(on_press) = on_press {
-        tooltip(
-            action.on_press(on_press),
-            label,
-            tooltip::Position::FollowCursor,
-        )
-        .style(container::rounded_box)
-        .into()
+        tooltip(action.on_press(on_press), label, tooltip::Position::Bottom)
+            .style(container::rounded_box)
+            .into()
     } else {
         action.style(button::secondary).into()
     }
