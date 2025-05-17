@@ -1,5 +1,5 @@
-use iced::widget::{container, text, text_editor};
-use iced::{Border, Color, Element, Font, Theme};
+use iced::widget::{container, scrollable, text, text_editor};
+use iced::{Border, Color, Element, Font, Shadow, Theme};
 
 // styling
 pub fn editor_style(_theme: &Theme) -> container::Style {
@@ -31,6 +31,67 @@ pub fn exit_modal_style(_theme: &Theme) -> container::Style {
             .into(),
         )),
         ..container::Style::default()
+    }
+}
+
+pub fn preview_scrollable_style(_theme: &Theme, status: scrollable::Status) -> scrollable::Style {
+    let transparent_border = Border {
+        color: Color::TRANSPARENT,
+        ..Border::default()
+    };
+
+    let transparent_scroller = scrollable::Scroller {
+        color: Color::TRANSPARENT,
+        border: transparent_border,
+    };
+
+    let transparent_rail = scrollable::Rail {
+        background: Some(iced::Background::Color(Color::TRANSPARENT)),
+        border: transparent_border,
+        scroller: transparent_scroller,
+    };
+
+    let transparent_style = scrollable::Style {
+        container: container::Style {
+            background: Some(iced::Background::Color(Color::TRANSPARENT)),
+            border: transparent_border,
+            shadow: Shadow {
+                color: Color::TRANSPARENT,
+                ..Shadow::default()
+            },
+            ..container::Style::default()
+        },
+        vertical_rail: transparent_rail,
+        horizontal_rail: transparent_rail,
+        gap: Some(iced::Background::Color(Color::TRANSPARENT)),
+    };
+
+    let default_scroller = scrollable::Scroller {
+        color: Color::default(),
+        border: Border::default(),
+    };
+
+    let default_rail = scrollable::Rail {
+        background: Some(iced::Background::Color(Color::default())),
+        border: Border::default(),
+        scroller: default_scroller,
+    };
+
+    match status {
+        scrollable::Status::Hovered {
+            is_horizontal_scrollbar_hovered: _,
+            is_vertical_scrollbar_hovered: _,
+        } => scrollable::Style {
+            container: container::Style::default(),
+            vertical_rail: default_rail,
+            horizontal_rail: default_rail,
+            gap: Some(iced::Background::Color(Color::default())),
+        },
+        scrollable::Status::Active => transparent_style,
+        scrollable::Status::Dragged {
+            is_horizontal_scrollbar_dragged: _,
+            is_vertical_scrollbar_dragged: _,
+        } => transparent_style,
     }
 }
 
