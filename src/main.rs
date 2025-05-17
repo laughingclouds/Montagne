@@ -34,6 +34,15 @@ struct Montagne {
 
     is_loading: bool,
     is_dirty: bool,
+
+    application_mode: Mode,
+}
+
+#[derive(Debug, Clone)]
+enum Mode {
+    WriteMode,
+    PreviewMode,
+    SplitMode,
 }
 
 // define messages (interactions of the application)
@@ -46,6 +55,7 @@ enum Message {
     FileOpened(Result<(PathBuf, Arc<String>), Error>),
     SaveFile,
     FileSaved(Result<PathBuf, Error>),
+    ApplicationModeChanged(Mode),
 }
 
 impl Montagne {
@@ -59,6 +69,7 @@ impl Montagne {
                 theme: theme,
                 is_loading: false,
                 is_dirty: false,
+                application_mode: Mode::WriteMode,
             },
             // change later to reload tabs (or previously opened editors)
             // Task::batch([
@@ -75,15 +86,15 @@ impl Montagne {
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::Edit(action) => {
-                let is_edit = action.is_edit();
+                // let is_edit = action.is_edit();
 
                 self.is_dirty = self.is_dirty || action.is_edit();
 
                 self.content.perform(action);
 
-                if is_edit {
-                    self.items = markdown::parse(&self.content.text()).collect();
-                }
+                // if is_edit {
+                //     self.items = markdown::parse(&self.content.text()).collect();
+                // }
 
                 Task::none()
             }
@@ -91,7 +102,8 @@ impl Montagne {
                 if !self.is_loading {
                     self.file = None;
                     self.content = text_editor::Content::new();
-                    self.items = markdown::parse(&self.content.text()).collect();
+                    // optionally check what mode the file is opened with
+                    // self.items = markdown::parse(&self.content.text()).collect();
                 }
 
                 Task::none()
@@ -111,7 +123,8 @@ impl Montagne {
 
                 if let Ok((path, content)) = result {
                     self.content = text_editor::Content::with_text(&content);
-                    self.items = markdown::parse(&content).collect();
+                    // optionally check what mode the file is opened with
+                    // self.items = markdown::parse(&content).collect();
                     self.file = Some(path);
                 }
 
@@ -143,6 +156,15 @@ impl Montagne {
                 let _ = open::that_in_background(link.to_string());
                 Task::none()
             }
+            Message::ApplicationModeChanged(mode) => {
+                if matches!(mode, Mode::PreviewMode | Mode::SplitMode) {
+                    self.items = markdown::parse(&self.content.text()).collect()
+                }
+
+                self.application_mode = mode;
+
+                Task::none()
+            }
         }
     }
 
@@ -169,18 +191,24 @@ impl Montagne {
                 .on_action(Message::Edit)
                 .style(text_editor_style);
 
-            let preview = markdown(
-                &self.items,
-                markdown::Settings::default(),
-                markdown::Style::from_palette(self.theme.palette()),
+            let preview = scrollable(
+                markdown(
+                    &self.items,
+                    markdown::Settings::default(),
+                    markdown::Style::from_palette(self.theme.palette()),
+                )
+                .map(Message::LinkClicked),
             )
-            .map(Message::LinkClicked);
-
-            row![
-                text_editor_input,
-                scrollable(preview).spacing(10).height(Length::Fill)
-            ]
             .spacing(10)
+            .height(Length::Fill);
+
+            let main_content = match &self.application_mode {
+                Mode::WriteMode => row![text_editor_input],
+                Mode::PreviewMode => row![preview],
+                Mode::SplitMode => row![text_editor_input, preview],
+            };
+
+            main_content.spacing(10)
         };
 
         // Bottom Content
