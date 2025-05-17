@@ -1,6 +1,6 @@
 # Montagne
 
-Markdown Editor én Rust.
+Windows Notepad Inspired Markdown Editor én Rust.
 
 Made using [iced](https://github.com/iced-rs/iced) (and ❤).
 
