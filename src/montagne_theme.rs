@@ -1,13 +1,12 @@
 use iced::widget::{container, text, text_editor};
-use iced::{Border, Color, Element, Font, Shadow, Theme};
+use iced::{Border, Color, Element, Font, Theme};
 
 // styling
 pub fn editor_style(_theme: &Theme) -> container::Style {
     container::Style {
         text_color: Some(Color::WHITE),
         background: Some(iced::Background::Color(Color::from_rgb(0.10, 0.10, 0.10))),
-        border: Border::default(),
-        shadow: Shadow::default(),
+        ..container::Style::default()
     }
 }
 
