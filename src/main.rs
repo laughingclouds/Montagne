@@ -7,12 +7,11 @@ use iced::widget::{
     stack, text, text_editor, toggler, tooltip,
 };
 use iced::{Element, Length, Subscription, window};
-use iced::{Font, Padding, Task, Theme};
+use iced::{Padding, Task, Theme, highlighter};
 
 mod montagne_theme;
 use montagne_theme::{
     editor_style, exit_modal_style, new_icon, open_icon, preview_scrollable_style, save_icon,
-    text_editor_style,
 };
 
 mod montagne_file_io;
@@ -23,7 +22,7 @@ fn main() -> iced::Result {
         .subscription(Montagne::subscription)
         .exit_on_close_request(false)
         .centered()
-        .default_font(Font::MONOSPACE)
+        // .default_font(Font::MONOSPACE)
         .font(include_bytes!("../fonts/icons.ttf").as_slice())
         .theme(Montagne::theme)
         .run_with(Montagne::new)
@@ -84,7 +83,7 @@ struct Montagne {
 
 impl Montagne {
     fn new() -> (Self, Task<Message>) {
-        let theme = Theme::TokyoNightStorm;
+        let theme = Theme::KanagawaDragon;
         (
             Self {
                 content: text_editor::Content::new(),
@@ -283,14 +282,14 @@ impl Montagne {
         let main = {
             let text_editor_input = text_editor(&self.content)
                 .height(Length::Fill)
-                .on_action(Message::Edit)
-                .style(text_editor_style);
+                .highlight("md", highlighter::Theme::InspiredGitHub)
+                .on_action(Message::Edit);
 
             let mut preview = scrollable(
                 markdown(
                     &self.items,
                     markdown::Settings::default(),
-                    markdown::Style::from_palette(self.theme.palette()),
+                    markdown::Style::from_palette(Theme::TokyoNight.palette()),
                 )
                 .map(Message::LinkClicked),
             )
