@@ -2,7 +2,6 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-
 // In any case we can show a msg to the user
 #[derive(Debug, Clone)]
 pub enum Error {
@@ -14,6 +13,7 @@ pub enum Error {
 pub async fn open_file() -> Result<(PathBuf, Arc<String>), Error> {
     let picked_file = rfd::AsyncFileDialog::new()
         .set_title("Open a markdown file...")
+        .add_filter("markdown", &["md"])
         .pick_file()
         .await
         .ok_or(Error::DialogClosed)?;
@@ -38,6 +38,7 @@ pub async fn save_file(path: Option<PathBuf>, contents: String) -> Result<PathBu
         path
     } else {
         rfd::AsyncFileDialog::new()
+            .add_filter("markdown", &["md"])
             .save_file()
             .await
             .as_ref()
