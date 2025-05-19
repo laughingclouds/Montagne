@@ -6,7 +6,7 @@ use iced::widget::{
     self, button, center, column, container, horizontal_space, markdown, opaque, row, scrollable,
     stack, text, text_editor, toggler, tooltip,
 };
-use iced::{Element, Length, Subscription, window};
+use iced::{Alignment, Element, Length, Subscription, window};
 use iced::{Padding, Task, Theme, highlighter};
 
 mod montagne_theme;
@@ -205,6 +205,9 @@ impl Montagne {
                         self.file = Some(path);
                         self.is_dirty = false;
                         self.application_msg = "File Saved".to_string();
+
+                        // also close the exit modal if we saved from there
+                        self.show_exit_modal = false;
                     }
                 }
 
@@ -257,7 +260,8 @@ impl Montagne {
                     (self.is_dirty).then_some(Message::SaveFile)
                 ),
                 horizontal_space()
-            ];
+            ]
+            .align_y(Alignment::Center);
 
             menu_bar = match &self.application_mode {
                 Mode::Write => {
@@ -349,11 +353,13 @@ impl Montagne {
                 app,
                 opaque(
                     center(opaque(column![
-                        text("You have unsaved work. Close?"),
+                        text("You have unsaved work. Save changes?"),
                         row![
-                            button("Yes").on_press(Message::CloseApp),
-                            button("No").on_press(Message::CloseExitModal),
+                            button("Save").on_press(Message::SaveFile),
+                            button("Close without saving").on_press(Message::CloseApp),
+                            button("Go back").on_press(Message::CloseExitModal),
                         ]
+                        .spacing(10)
                     ]))
                     .style(exit_modal_style)
                 ),
