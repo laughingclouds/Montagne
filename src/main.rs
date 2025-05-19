@@ -5,7 +5,7 @@ use iced::{
     Alignment, Element, Length, Padding, Subscription, Task, Theme, highlighter,
     widget::{
         self, button, center, column, container, horizontal_space, markdown, row, scrollable, text,
-        text_editor, toggler, tooltip,
+        text_editor, toggler,
     },
     window,
 };
@@ -14,7 +14,7 @@ mod message;
 use message::Message;
 
 mod custom_widget;
-use custom_widget::modal::exit_modal;
+use custom_widget::{action, modal::exit_modal};
 
 mod montagne_theme;
 use montagne_theme::{editor_style, new_icon, open_icon, preview_scrollable_style, save_icon};
@@ -342,22 +342,5 @@ impl Montagne {
 
     fn theme(&self) -> Theme {
         self.theme.clone()
-    }
-}
-
-// A wrapper for any on_press events on buttons.
-fn action<'a, Message: Clone + 'a>(
-    content: impl Into<Element<'a, Message>>,
-    label: &'a str,
-    on_press: Option<Message>,
-) -> Element<'a, Message> {
-    let action = button(container(content).center_x(30));
-
-    if let Some(on_press) = on_press {
-        tooltip(action.on_press(on_press), label, tooltip::Position::Bottom)
-            .style(container::rounded_box)
-            .into()
-    } else {
-        action.style(button::secondary).into()
     }
 }
