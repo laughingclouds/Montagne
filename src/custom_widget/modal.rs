@@ -1,12 +1,10 @@
-use crate::montagne_theme::modal_style;
-
 use iced::{
     Border, Color, Element,
     border::Radius,
     widget::{button, center, column, container, opaque, row, stack, text},
 };
 
-use crate::message::Message;
+use crate::{message::Message, montagne_theme::modal_style};
 
 // This has the where clause to confirm Message is what I want it to be
 fn modal<'a, Message>(
