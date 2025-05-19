@@ -1,4 +1,4 @@
-use iced::widget::{container, scrollable, text, text_editor};
+use iced::widget::{container, scrollable, text};
 use iced::{Border, Color, Element, Font, Shadow, Theme};
 
 // styling
@@ -10,26 +10,26 @@ pub fn editor_style(_theme: &Theme) -> container::Style {
     }
 }
 
-pub fn text_editor_style(_theme: &Theme, _status: text_editor::Status) -> text_editor::Style {
-    text_editor::Style {
-        background: iced::Background::Color(Color::from_rgb(0.1216, 0.1216, 0.1216)),
-        border: Border::default(),
-        icon: Color::default(),
-        placeholder: Color::WHITE,
-        value: Color::WHITE,
-        selection: Color::from_rgb(0.6784, 0.8392, 1.0).scale_alpha(0.15),
-    }
-}
+// pub fn text_editor_style(_theme: &Theme, _status: text_editor::Status) -> text_editor::Style {
+//     text_editor::Style {
+//         background: iced::Background::Color(Color::from_rgb(0.1216, 0.1216, 0.1216)),
+//         border: Border::default(),
+//         icon: Color::default(),
+//         placeholder: Color::WHITE,
+//         value: Color::WHITE,
+//         selection: Color::from_rgb(0.6784, 0.8392, 1.0).scale_alpha(0.15),
+//     }
+// }
 
-pub fn exit_modal_style(_theme: &Theme) -> container::Style {
+pub fn modal_style(_theme: &Theme) -> container::Style {
     container::Style {
-        background: (Some(
+        background: Some(
             Color {
                 a: 0.8,
                 ..Color::BLACK
             }
             .into(),
-        )),
+        ),
         ..container::Style::default()
     }
 }

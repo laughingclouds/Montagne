@@ -1,18 +1,23 @@
 // #![windows_subsystem = "windows"]
 use std::path::PathBuf;
-use std::sync::Arc;
 
-use iced::widget::{
-    self, button, center, column, container, horizontal_space, markdown, opaque, row, scrollable,
-    stack, text, text_editor, toggler, tooltip,
+use iced::{
+    Alignment, Element, Length, Padding, Subscription, Task, Theme, highlighter,
+    widget::{
+        self, button, center, column, container, horizontal_space, markdown, row, scrollable, text,
+        text_editor, toggler, tooltip,
+    },
+    window,
 };
-use iced::{Alignment, Element, Length, Subscription, window};
-use iced::{Padding, Task, Theme, highlighter};
+
+mod message;
+use message::Message;
+
+mod custom_widget;
+use custom_widget::modal::exit_modal;
 
 mod montagne_theme;
-use montagne_theme::{
-    editor_style, exit_modal_style, new_icon, open_icon, preview_scrollable_style, save_icon,
-};
+use montagne_theme::{editor_style, new_icon, open_icon, preview_scrollable_style, save_icon};
 
 mod montagne_file_io;
 use montagne_file_io::{Error, open_file, save_file};
@@ -45,23 +50,6 @@ impl std::fmt::Display for Mode {
     }
 }
 
-// define messages (interactions of the application)
-#[derive(Debug, Clone)]
-enum Message {
-    Edit(text_editor::Action),
-    LinkClicked(markdown::Url),
-    NewFile,
-    OpenFile,
-    FileOpened(Result<(PathBuf, Arc<String>), Error>),
-    SaveFile,
-    FileSaved(Result<PathBuf, Error>),
-    SetMode(Mode),
-    TogglerToggled,
-    WindowEvent(window::Event),
-    CloseApp,
-    CloseExitModal,
-}
-
 // define state
 struct Montagne {
     content: text_editor::Content,
@@ -76,7 +64,7 @@ struct Montagne {
     application_mode: Mode,
     application_msg: String,
 
-    show_exit_modal: bool,
+    is_show_exit_modal: bool,
 }
 
 impl Montagne {
@@ -92,7 +80,7 @@ impl Montagne {
                 is_dirty: false,
                 application_mode: Mode::Write,
                 application_msg: String::from("Welcome to Montagne."),
-                show_exit_modal: false,
+                is_show_exit_modal: false,
             },
             // change later to reload tabs (or previously opened editors)
             Task::none(),
@@ -104,7 +92,7 @@ impl Montagne {
             Message::WindowEvent(window::Event::CloseRequested) => {
                 if self.is_dirty {
                     self.application_msg = "Close Requested".to_string();
-                    self.show_exit_modal = true;
+                    self.is_show_exit_modal = true;
                     widget::focus_next()
                 } else {
                     Task::done(Message::CloseApp)
@@ -114,11 +102,13 @@ impl Montagne {
             Message::CloseApp => window::get_latest().and_then(window::close),
             Message::CloseExitModal => {
                 self.application_msg = "Request Cancelled".to_string();
-                self.show_exit_modal = false;
+                self.is_show_exit_modal = false;
                 Task::none()
             }
             Message::Edit(action) => {
-                // let is_edit = action.is_edit();
+                if self.is_show_exit_modal {
+                    return Task::none();
+                }
 
                 self.is_dirty = self.is_dirty || action.is_edit();
 
@@ -204,7 +194,7 @@ impl Montagne {
                         self.application_msg = "File Saved".to_string();
 
                         // also close the exit modal if we saved from there
-                        self.show_exit_modal = false;
+                        self.is_show_exit_modal = false;
                     }
                 }
 
@@ -343,23 +333,8 @@ impl Montagne {
             .padding(Padding::from([5, 5]))
             .style(editor_style);
 
-        if self.show_exit_modal {
-            stack![
-                app,
-                opaque(
-                    center(opaque(column![
-                        text("You have unsaved work. Save changes?"),
-                        row![
-                            button("Save").on_press(Message::SaveFile),
-                            button("Close without saving").on_press(Message::CloseApp),
-                            button("Go back").on_press(Message::CloseExitModal),
-                        ]
-                        .spacing(10)
-                    ]))
-                    .style(exit_modal_style)
-                ),
-            ]
-            .into()
+        if self.is_show_exit_modal {
+            exit_modal(app)
         } else {
             app.into()
         }
