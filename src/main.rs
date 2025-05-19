@@ -56,7 +56,7 @@ enum Message {
     SaveFile,
     FileSaved(Result<PathBuf, Error>),
     SetMode(Mode),
-    TogglerToggled(bool),
+    TogglerToggled,
     WindowEvent(window::Event),
     CloseApp,
     CloseExitModal,
@@ -74,8 +74,6 @@ struct Montagne {
     is_dirty: bool,
 
     application_mode: Mode,
-    is_splitview: bool,
-
     application_msg: String,
 
     show_exit_modal: bool,
@@ -93,7 +91,6 @@ impl Montagne {
                 is_loading: false,
                 is_dirty: false,
                 application_mode: Mode::Write,
-                is_splitview: false,
                 application_msg: String::from("Welcome to Montagne."),
                 show_exit_modal: false,
             },
@@ -127,7 +124,7 @@ impl Montagne {
 
                 self.content.perform(action);
 
-                if self.is_splitview {
+                if matches!(self.application_mode, Mode::Split | Mode::Preview) {
                     self.items = markdown::parse(&self.content.text()).collect();
                 }
 
@@ -228,10 +225,8 @@ impl Montagne {
 
                 Task::none()
             }
-            Message::TogglerToggled(is_splitview) => {
-                self.is_splitview = is_splitview;
-
-                if is_splitview {
+            Message::TogglerToggled => {
+                if matches!(self.application_mode, Mode::Preview | Mode::Write) {
                     Task::done(Message::SetMode(Mode::Split))
                 } else {
                     Task::done(Message::SetMode(Mode::Write))
@@ -274,9 +269,9 @@ impl Montagne {
             };
 
             menu_bar = menu_bar.push(
-                toggler(self.is_splitview)
+                toggler(matches!(self.application_mode, Mode::Split))
                     .label("Split")
-                    .on_toggle(Message::TogglerToggled),
+                    .on_toggle(|_| Message::TogglerToggled),
             );
 
             menu_bar
