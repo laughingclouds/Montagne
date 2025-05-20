@@ -24,4 +24,8 @@ pub enum Message {
     WindowEvent(window::Event),
     CloseApp,
     CloseExitModal,
+    FileModified, // file stored in storage has changed
+    // user should either reload file or keep current changes (if is_dirty otherwise reload automatically)
+    /// Load (reload) the active file.
+    LoadFile,
 }
