@@ -14,13 +14,13 @@ mod message;
 use message::Message;
 
 mod custom_widget;
-use custom_widget::{action, modal::exit_modal};
+use custom_widget::{action, modal::{exit_modal, file_changed_modal}};
 
 mod montagne_theme;
 use montagne_theme::{editor_style, new_icon, open_icon, preview_scrollable_style, save_icon};
 
 mod montagne_file_io;
-use montagne_file_io::{Error, open_file, save_file};
+use montagne_file_io::{Error, load_file, open_file, save_file};
 
 fn main() -> iced::Result {
     iced::application("Montagne", Montagne::update, Montagne::view)
@@ -54,7 +54,7 @@ impl std::fmt::Display for Mode {
 struct Montagne {
     content: text_editor::Content,
     items: Vec<markdown::Item>,
-    file: Option<PathBuf>,
+    active_file: Option<PathBuf>,
 
     theme: Theme,
 
@@ -65,6 +65,7 @@ struct Montagne {
     application_msg: String,
 
     is_show_exit_modal: bool,
+    is_show_file_changed_modal: bool,
 }
 
 impl Montagne {
@@ -74,13 +75,14 @@ impl Montagne {
             Self {
                 content: text_editor::Content::new(),
                 items: markdown::parse("").collect(),
-                file: None,
+                active_file: None,
                 theme: theme,
                 is_loading: false,
                 is_dirty: false,
                 application_mode: Mode::Write,
                 application_msg: String::from("Welcome to Montagne."),
                 is_show_exit_modal: false,
+                is_show_file_changed_modal: false,
             },
             // change later to reload tabs (or previously opened editors)
             Task::none(),
@@ -120,9 +122,21 @@ impl Montagne {
 
                 Task::none()
             }
+            Message::FileModified => {
+                if self.is_dirty {
+                    self.is_show_file_changed_modal = true;
+                    Task::none()
+                } else {
+                    self.load_active_file_or_set_error()
+                }
+            }
+            Message::LoadFile => {
+                self.is_loading = true;
+                self.load_active_file_or_set_error()
+            }
             Message::NewFile => {
                 if !self.is_loading {
-                    self.file = None;
+                    self.active_file = None;
                     self.content = text_editor::Content::new();
                     // optionally check what mode the file is opened with
                     if matches!(&self.application_mode, Mode::Preview | Mode::Split) {
@@ -143,7 +157,6 @@ impl Montagne {
             }
             Message::FileOpened(result) => {
                 self.is_loading = false;
-                self.is_dirty = false;
 
                 match result {
                     Err(Error::DialogClosed) => {
@@ -154,8 +167,9 @@ impl Montagne {
                         eprint!("{}", kind)
                     }
                     Ok((path, content)) => {
+                        self.is_dirty = false;
                         self.content = text_editor::Content::with_text(&content);
-                        self.file = Some(path);
+                        self.active_file = Some(path);
                         self.application_msg = "File Opened".to_string();
 
                         if matches!(&self.application_mode, Mode::Preview | Mode::Split) {
@@ -173,7 +187,7 @@ impl Montagne {
                     self.is_loading = true;
 
                     Task::perform(
-                        save_file(self.file.clone(), self.content.text()),
+                        save_file(self.active_file.clone(), self.content.text()),
                         Message::FileSaved,
                     )
                 }
@@ -189,8 +203,8 @@ impl Montagne {
                         self.application_msg = format!("I/O Error {}", kind)
                     }
                     Ok(path) => {
-                        self.file = Some(path);
-                        self.is_dirty = false;
+                        self.active_file = Some(path);
+                        self.is_dirty = false; // is_dirty becomes false only when we know it for sure
                         self.application_msg = "File Saved".to_string();
 
                         // also close the exit modal if we saved from there
@@ -226,7 +240,9 @@ impl Montagne {
     }
 
     fn subscription(&self) -> Subscription<Message> {
-        window::events().map(|(_id, event)| Message::WindowEvent(event))
+        let window_events = window::events().map(|(_id, event)| Message::WindowEvent(event));
+
+        Subscription::batch([window_events])
     }
 
     fn view(&self) -> Element<'_, Message> {
@@ -308,7 +324,7 @@ impl Montagne {
                 text(format!("Ln {}, Col {}", ln + 1, col + 1))
             };
 
-            let path_text = match &self.file {
+            let path_text = match &self.active_file {
                 Some(path) => path
                     .file_name()
                     .and_then(|name| name.to_str())
@@ -335,12 +351,30 @@ impl Montagne {
 
         if self.is_show_exit_modal {
             exit_modal(app)
-        } else {
+        } else if self.is_show_file_changed_modal {
+            match &self.active_file {
+                Some(path) => file_changed_modal(app, path.clone()),
+                None => app.into()
+            }
+        }
+         else {
             app.into()
         }
     }
 
     fn theme(&self) -> Theme {
         self.theme.clone()
+    }
+}
+
+impl Montagne {
+    fn load_active_file_or_set_error(&mut self) -> Task<Message> {
+        match &self.active_file {
+            Some(path) => Task::perform(load_file(path.clone()), Message::FileOpened),
+            None => {
+                self.application_msg = "Error: No file path for active file.".to_string();
+                Task::none()
+            }
+        }
     }
 }
